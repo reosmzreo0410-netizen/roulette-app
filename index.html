@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ルーレット</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            padding: 20px;
+        }
+
+        h1 {
+            color: #fff;
+            margin-bottom: 30px;
+            font-size: 2.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .roulette-container {
+            position: relative;
+            width: 400px;
+            height: 400px;
+        }
+
+        .pointer {
+            position: absolute;
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 20px solid transparent;
+            border-right: 20px solid transparent;
+            border-top: 40px solid #ffd700;
+            z-index: 10;
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));
+        }
+
+        .wheel {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 0 30px rgba(0,0,0,0.5), inset 0 0 20px rgba(255,255,255,0.1);
+            transition: transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99);
+        }
+
+        .segment {
+            position: absolute;
+            width: 50%;
+            height: 50%;
+            left: 50%;
+            top: 0;
+            transform-origin: 0% 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            clip-path: polygon(0% 100%, 100% 0%, 0% 0%);
+        }
+
+        .segment span {
+            position: absolute;
+            left: 25%;
+            top: 45%;
+            transform: rotate(72deg) translateX(-50%);
+            font-weight: bold;
+            font-size: 14px;
+            color: #fff;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+            white-space: nowrap;
+        }
+
+        .spin-btn {
+            margin-top: 40px;
+            padding: 15px 60px;
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: #fff;
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 6px 20px rgba(231, 76, 60, 0.4);
+            transition: all 0.3s ease;
+        }
+
+        .spin-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(231, 76, 60, 0.5);
+        }
+
+        .spin-btn:active {
+            transform: translateY(0);
+        }
+
+        .spin-btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .result {
+            margin-top: 30px;
+            padding: 20px 40px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 15px;
+            color: #fff;
+            font-size: 1.5rem;
+            min-height: 70px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(10px);
+        }
+
+        .result .winner {
+            color: #ffd700;
+            font-weight: bold;
+            font-size: 2rem;
+        }
+
+        @media (max-width: 500px) {
+            .roulette-container {
+                width: 300px;
+                height: 300px;
+            }
+            h1 {
+                font-size: 1.8rem;
+            }
+            .segment span {
+                font-size: 11px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>ルーレット</h1>
+
+    <div class="roulette-container">
+        <div class="pointer"></div>
+        <div class="wheel" id="wheel"></div>
+    </div>
+
+    <button class="spin-btn" id="spinBtn" onclick="spin()">スピン!</button>
+
+    <div class="result" id="result">
+        ボタンを押してルーレットを回そう!
+    </div>
+
+    <script>
+        const members = ['レオ', 'ムサシ', 'マミ', 'タケル', 'リカ', 'ゲンタ', 'メイ', 'ミサ', 'シュン', 'ヨシキ'];
+
+        const colors = [
+            '#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6',
+            '#1abc9c', '#e67e22', '#34495e', '#e91e63', '#00bcd4'
+        ];
+
+        const wheel = document.getElementById('wheel');
+        const spinBtn = document.getElementById('spinBtn');
+        const result = document.getElementById('result');
+
+        let currentRotation = 0;
+        let isSpinning = false;
+
+        function createWheel() {
+            const segmentAngle = 360 / members.length;
+
+            members.forEach((member, index) => {
+                const segment = document.createElement('div');
+                segment.className = 'segment';
+                segment.style.backgroundColor = colors[index];
+                segment.style.transform = `rotate(${index * segmentAngle - 90 + segmentAngle/2}deg) skewY(${90 - segmentAngle}deg)`;
+
+                const span = document.createElement('span');
+                span.textContent = member;
+                span.style.transform = `skewY(${-(90 - segmentAngle)}deg) rotate(${segmentAngle/2}deg)`;
+
+                segment.appendChild(span);
+                wheel.appendChild(segment);
+            });
+        }
+
+        function spin() {
+            if (isSpinning) return;
+
+            isSpinning = true;
+            spinBtn.disabled = true;
+            result.innerHTML = 'スピン中...';
+
+            const spinDegrees = 360 * 5 + Math.random() * 360;
+            currentRotation += spinDegrees;
+
+            wheel.style.transform = `rotate(${currentRotation}deg)`;
+
+            setTimeout(() => {
+                const normalizedRotation = currentRotation % 360;
+                const segmentAngle = 360 / members.length;
+                const winnerIndex = Math.floor((360 - normalizedRotation + segmentAngle / 2) % 360 / segmentAngle);
+                const winner = members[winnerIndex];
+
+                result.innerHTML = `当選者: <span class="winner">${winner}</span>`;
+                isSpinning = false;
+                spinBtn.disabled = false;
+            }, 4000);
+        }
+
+        createWheel();
+    </script>
+</body>
+</html>
