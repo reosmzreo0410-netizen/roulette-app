@@ -20,6 +20,7 @@
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
             font-family: 'Helvetica Neue', Arial, sans-serif;
             padding: 20px;
+            overflow: hidden;
         }
 
         h1 {
@@ -47,13 +48,17 @@
             border-top: 40px solid #ffd700;
             z-index: 10;
             filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));
+            transition: transform 0.1s;
+        }
+
+        .pointer.tick {
+            transform: translateX(-50%) scale(1.2);
         }
 
         .wheel-svg {
             width: 100%;
             height: 100%;
             filter: drop-shadow(0 0 20px rgba(0,0,0,0.5));
-            transition: transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99);
         }
 
         .segment-path {
@@ -65,7 +70,6 @@
             fill: #fff;
             font-weight: bold;
             font-size: 16px;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
         }
 
         .spin-btn {
@@ -109,12 +113,78 @@
             align-items: center;
             justify-content: center;
             backdrop-filter: blur(10px);
+            transition: all 0.3s;
         }
 
         .result .winner {
             color: #ffd700;
             font-weight: bold;
             font-size: 2rem;
+            animation: winner-pulse 0.5s ease-in-out infinite alternate;
+        }
+
+        @keyframes winner-pulse {
+            from { transform: scale(1); }
+            to { transform: scale(1.1); }
+        }
+
+        .confetti {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            pointer-events: none;
+            opacity: 0;
+            z-index: 100;
+        }
+
+        @keyframes confetti-fall {
+            0% {
+                opacity: 1;
+                transform: translateY(0) rotate(0deg);
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(100vh) rotate(720deg);
+            }
+        }
+
+        .drum-roll {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3rem;
+            color: #ffd700;
+            text-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
+            opacity: 0;
+            z-index: 50;
+            pointer-events: none;
+        }
+
+        .drum-roll.show {
+            animation: drum-roll-anim 0.5s ease-out forwards;
+        }
+
+        @keyframes drum-roll-anim {
+            0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+            50% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
+        }
+
+        .speed-lines {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 500px;
+            height: 500px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .speed-lines.active {
+            opacity: 0.3;
         }
 
         @media (max-width: 500px) {
@@ -135,9 +205,8 @@
     <h1>ルーレット</h1>
 
     <div class="roulette-container">
-        <div class="pointer"></div>
-        <svg class="wheel-svg" id="wheel" viewBox="0 0 400 400">
-        </svg>
+        <div class="pointer" id="pointer"></div>
+        <svg class="wheel-svg" id="wheel" viewBox="0 0 400 400"></svg>
     </div>
 
     <button class="spin-btn" id="spinBtn" onclick="spin()">スピン!</button>
@@ -145,6 +214,8 @@
     <div class="result" id="result">
         ボタンを押してルーレットを回そう!
     </div>
+
+    <div class="drum-roll" id="drumRoll"></div>
 
     <script>
         const members = ['レオ', 'ムサシ', 'マミ', 'タケル', 'リカ', 'ゲンタ', 'メイ', 'ミサ', 'シュン', 'ヨシキ'];
@@ -157,6 +228,8 @@
         const wheel = document.getElementById('wheel');
         const spinBtn = document.getElementById('spinBtn');
         const result = document.getElementById('result');
+        const pointer = document.getElementById('pointer');
+        const drumRoll = document.getElementById('drumRoll');
 
         const centerX = 200;
         const centerY = 200;
@@ -164,6 +237,59 @@
 
         let currentRotation = 0;
         let isSpinning = false;
+        let animationId = null;
+
+        // Audio context for tick sounds
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playTick(volume = 0.3) {
+            if (!audioCtx) return;
+
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            oscillator.frequency.value = 800 + Math.random() * 400;
+            oscillator.type = 'sine';
+
+            gainNode.gain.setValueAtTime(volume, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+
+            oscillator.start(audioCtx.currentTime);
+            oscillator.stop(audioCtx.currentTime + 0.05);
+        }
+
+        function playWinSound() {
+            if (!audioCtx) return;
+
+            const notes = [523.25, 659.25, 783.99, 1046.50];
+            notes.forEach((freq, i) => {
+                setTimeout(() => {
+                    const oscillator = audioCtx.createOscillator();
+                    const gainNode = audioCtx.createGain();
+
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioCtx.destination);
+
+                    oscillator.frequency.value = freq;
+                    oscillator.type = 'sine';
+
+                    gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+
+                    oscillator.start(audioCtx.currentTime);
+                    oscillator.stop(audioCtx.currentTime + 0.3);
+                }, i * 100);
+            });
+        }
 
         function polarToCartesian(cx, cy, r, angleDeg) {
             const angleRad = (angleDeg - 90) * Math.PI / 180;
@@ -193,14 +319,13 @@
                 const startAngle = index * segmentAngle;
                 const endAngle = startAngle + segmentAngle;
 
-                // Create segment path
                 const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 path.setAttribute('d', createArcPath(centerX, centerY, radius, startAngle, endAngle));
                 path.setAttribute('fill', colors[index]);
                 path.setAttribute('class', 'segment-path');
+                path.setAttribute('data-index', index);
                 wheel.appendChild(path);
 
-                // Create text
                 const textAngle = startAngle + segmentAngle / 2;
                 const textRadius = radius * 0.65;
                 const textPos = polarToCartesian(centerX, centerY, textRadius, textAngle);
@@ -216,7 +341,6 @@
                 wheel.appendChild(text);
             });
 
-            // Add center circle
             const centerCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
             centerCircle.setAttribute('cx', centerX);
             centerCircle.setAttribute('cy', centerY);
@@ -227,28 +351,132 @@
             wheel.appendChild(centerCircle);
         }
 
+        function createConfetti() {
+            const confettiColors = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#ffd700'];
+
+            for (let i = 0; i < 50; i++) {
+                setTimeout(() => {
+                    const confetti = document.createElement('div');
+                    confetti.className = 'confetti';
+                    confetti.style.left = Math.random() * 100 + 'vw';
+                    confetti.style.top = '-20px';
+                    confetti.style.backgroundColor = confettiColors[Math.floor(Math.random() * confettiColors.length)];
+                    confetti.style.borderRadius = Math.random() > 0.5 ? '50%' : '0';
+                    confetti.style.width = (Math.random() * 10 + 5) + 'px';
+                    confetti.style.height = (Math.random() * 10 + 5) + 'px';
+                    confetti.style.animation = `confetti-fall ${Math.random() * 2 + 2}s linear forwards`;
+
+                    document.body.appendChild(confetti);
+
+                    setTimeout(() => confetti.remove(), 4000);
+                }, Math.random() * 500);
+            }
+        }
+
+        function showDrumRoll(text) {
+            drumRoll.textContent = text;
+            drumRoll.classList.add('show');
+            setTimeout(() => drumRoll.classList.remove('show'), 500);
+        }
+
+        function easeOutExpo(t) {
+            return t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
+        }
+
         function spin() {
             if (isSpinning) return;
+
+            initAudio();
 
             isSpinning = true;
             spinBtn.disabled = true;
             result.innerHTML = 'スピン中...';
 
-            const spinDegrees = 360 * 5 + Math.random() * 360;
-            currentRotation += spinDegrees;
+            // Random total rotation (5-10 full rotations + random angle)
+            const totalRotations = 5 + Math.random() * 5;
+            const extraAngle = Math.random() * 360;
+            const totalDegrees = totalRotations * 360 + extraAngle;
 
-            wheel.style.transform = `rotate(${currentRotation}deg)`;
+            const startRotation = currentRotation;
+            const targetRotation = currentRotation + totalDegrees;
 
-            setTimeout(() => {
-                const normalizedRotation = currentRotation % 360;
+            // Animation duration with variation
+            const baseDuration = 6000;
+            const duration = baseDuration + Math.random() * 2000;
+
+            const startTime = performance.now();
+            let lastSegment = -1;
+            let showedAlmost = false;
+
+            function animate(currentTime) {
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+
+                // Custom easing - slow down dramatically at the end
+                let easedProgress;
+                if (progress < 0.7) {
+                    easedProgress = easeOutExpo(progress / 0.7) * 0.85;
+                } else {
+                    // Very slow final stretch
+                    const finalProgress = (progress - 0.7) / 0.3;
+                    easedProgress = 0.85 + finalProgress * 0.15 * (1 - Math.pow(1 - finalProgress, 3));
+                }
+
+                currentRotation = startRotation + totalDegrees * easedProgress;
+                wheel.style.transform = `rotate(${currentRotation}deg)`;
+
+                // Calculate current segment for tick sound
+                const normalizedRotation = ((currentRotation % 360) + 360) % 360;
                 const segmentAngle = 360 / members.length;
-                const winnerIndex = Math.floor((360 - normalizedRotation + segmentAngle / 2) % 360 / segmentAngle);
-                const winner = members[winnerIndex];
+                const currentSegment = Math.floor(normalizedRotation / segmentAngle);
 
-                result.innerHTML = `当選者: <span class="winner">${winner}</span>`;
-                isSpinning = false;
-                spinBtn.disabled = false;
-            }, 4000);
+                if (currentSegment !== lastSegment) {
+                    lastSegment = currentSegment;
+
+                    // Tick sound and pointer animation
+                    const volume = progress < 0.8 ? 0.2 : 0.4;
+                    playTick(volume);
+
+                    pointer.classList.add('tick');
+                    setTimeout(() => pointer.classList.remove('tick'), 50);
+                }
+
+                // Show "Almost there!" at 80%
+                if (progress > 0.75 && progress < 0.85 && !showedAlmost) {
+                    showedAlmost = true;
+                    showDrumRoll('もうすぐ...');
+                }
+
+                if (progress < 1) {
+                    animationId = requestAnimationFrame(animate);
+                } else {
+                    // Animation complete
+                    finishSpin();
+                }
+            }
+
+            animationId = requestAnimationFrame(animate);
+        }
+
+        function finishSpin() {
+            const normalizedRotation = ((currentRotation % 360) + 360) % 360;
+            const segmentAngle = 360 / members.length;
+            const winnerIndex = Math.floor(((360 - normalizedRotation + segmentAngle / 2) % 360) / segmentAngle);
+            const winner = members[winnerIndex];
+
+            // Dramatic pause before reveal
+            setTimeout(() => {
+                showDrumRoll('🎉');
+
+                setTimeout(() => {
+                    result.innerHTML = `当選者: <span class="winner">${winner}</span>`;
+                    playWinSound();
+                    createConfetti();
+
+                    isSpinning = false;
+                    spinBtn.disabled = false;
+                }, 300);
+            }, 500);
         }
 
         createWheel();
