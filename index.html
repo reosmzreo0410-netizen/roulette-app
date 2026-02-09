@@ -37,7 +37,7 @@
 
         .pointer {
             position: absolute;
-            top: -30px;
+            top: -20px;
             left: 50%;
             transform: translateX(-50%);
             width: 0;
@@ -49,39 +49,23 @@
             filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));
         }
 
-        .wheel {
+        .wheel-svg {
             width: 100%;
             height: 100%;
-            border-radius: 50%;
-            position: relative;
-            overflow: hidden;
-            box-shadow: 0 0 30px rgba(0,0,0,0.5), inset 0 0 20px rgba(255,255,255,0.1);
+            filter: drop-shadow(0 0 20px rgba(0,0,0,0.5));
             transition: transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99);
         }
 
-        .segment {
-            position: absolute;
-            width: 50%;
-            height: 50%;
-            left: 50%;
-            top: 0;
-            transform-origin: 0% 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            clip-path: polygon(0% 100%, 100% 0%, 0% 0%);
+        .segment-path {
+            stroke: #fff;
+            stroke-width: 2;
         }
 
-        .segment span {
-            position: absolute;
-            left: 25%;
-            top: 45%;
-            transform: rotate(72deg) translateX(-50%);
+        .segment-text {
+            fill: #fff;
             font-weight: bold;
-            font-size: 14px;
-            color: #fff;
+            font-size: 16px;
             text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-            white-space: nowrap;
         }
 
         .spin-btn {
@@ -141,8 +125,8 @@
             h1 {
                 font-size: 1.8rem;
             }
-            .segment span {
-                font-size: 11px;
+            .segment-text {
+                font-size: 12px;
             }
         }
     </style>
@@ -152,7 +136,8 @@
 
     <div class="roulette-container">
         <div class="pointer"></div>
-        <div class="wheel" id="wheel"></div>
+        <svg class="wheel-svg" id="wheel" viewBox="0 0 400 400">
+        </svg>
     </div>
 
     <button class="spin-btn" id="spinBtn" onclick="spin()">スピン!</button>
@@ -173,25 +158,73 @@
         const spinBtn = document.getElementById('spinBtn');
         const result = document.getElementById('result');
 
+        const centerX = 200;
+        const centerY = 200;
+        const radius = 190;
+
         let currentRotation = 0;
         let isSpinning = false;
+
+        function polarToCartesian(cx, cy, r, angleDeg) {
+            const angleRad = (angleDeg - 90) * Math.PI / 180;
+            return {
+                x: cx + r * Math.cos(angleRad),
+                y: cy + r * Math.sin(angleRad)
+            };
+        }
+
+        function createArcPath(cx, cy, r, startAngle, endAngle) {
+            const start = polarToCartesian(cx, cy, r, endAngle);
+            const end = polarToCartesian(cx, cy, r, startAngle);
+            const largeArcFlag = endAngle - startAngle <= 180 ? 0 : 1;
+
+            return [
+                'M', cx, cy,
+                'L', start.x, start.y,
+                'A', r, r, 0, largeArcFlag, 0, end.x, end.y,
+                'Z'
+            ].join(' ');
+        }
 
         function createWheel() {
             const segmentAngle = 360 / members.length;
 
             members.forEach((member, index) => {
-                const segment = document.createElement('div');
-                segment.className = 'segment';
-                segment.style.backgroundColor = colors[index];
-                segment.style.transform = `rotate(${index * segmentAngle - 90 + segmentAngle/2}deg) skewY(${90 - segmentAngle}deg)`;
+                const startAngle = index * segmentAngle;
+                const endAngle = startAngle + segmentAngle;
 
-                const span = document.createElement('span');
-                span.textContent = member;
-                span.style.transform = `skewY(${-(90 - segmentAngle)}deg) rotate(${segmentAngle/2}deg)`;
+                // Create segment path
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', createArcPath(centerX, centerY, radius, startAngle, endAngle));
+                path.setAttribute('fill', colors[index]);
+                path.setAttribute('class', 'segment-path');
+                wheel.appendChild(path);
 
-                segment.appendChild(span);
-                wheel.appendChild(segment);
+                // Create text
+                const textAngle = startAngle + segmentAngle / 2;
+                const textRadius = radius * 0.65;
+                const textPos = polarToCartesian(centerX, centerY, textRadius, textAngle);
+
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', textPos.x);
+                text.setAttribute('y', textPos.y);
+                text.setAttribute('text-anchor', 'middle');
+                text.setAttribute('dominant-baseline', 'middle');
+                text.setAttribute('class', 'segment-text');
+                text.setAttribute('transform', `rotate(${textAngle}, ${textPos.x}, ${textPos.y})`);
+                text.textContent = member;
+                wheel.appendChild(text);
             });
+
+            // Add center circle
+            const centerCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            centerCircle.setAttribute('cx', centerX);
+            centerCircle.setAttribute('cy', centerY);
+            centerCircle.setAttribute('r', 30);
+            centerCircle.setAttribute('fill', '#fff');
+            centerCircle.setAttribute('stroke', '#333');
+            centerCircle.setAttribute('stroke-width', '3');
+            wheel.appendChild(centerCircle);
         }
 
         function spin() {
